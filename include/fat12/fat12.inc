@@ -17,11 +17,42 @@ BS_BootSig      db    0x29              ; BootSig扩展引导标记
 BS_VolD         dd    0xffffffff        ; VolID 
 BS_VolLab       db    "MOOS "     ; 卷标
 BS_FileSysType  db    "FAT12   "        ; FilesysType
+;==============================================================
+;读扇区函数
+; es : bx  ->  读取扇区到的内存地址
+; ax : 第几个扇区
+; cl ; 读取几个扇区
+;==============================================================
+ReadSector:
+	push bp				;0x7c79
+	mov bp, sp
+	sub esp, 2
 
-;==============================================================
-;包含 func16 基础头文件
-;==============================================================
-%include "func16.inc"
+	mov byte [bp-2], cl
+	push bx
+	mov bl, [BPB_SecPerTrk]
+	div bl
+	inc ah
+	mov cl, ah
+	mov dh, al
+	shr al, 1
+	mov ch, al
+	and dh, 1
+	pop bx
+	mov dl, [BS_DrvNum]
+.GoOnReading:
+	mov ah, 2
+	mov al, byte [bp-2]
+	int 13h
+	jc .GoOnReading
+
+	add esp, 2
+	pop bp
+
+	ret
+
+
+
 ;==============================================================
 ;函数   GetFatByAx  用到的变量
 ;==============================================================
@@ -36,6 +67,11 @@ isOdd	                db 	        0					;FAT表项的奇偶
 GetFatByAx:
 	push es                                 ;保存段，和字节偏移地址
 	push bx
+	push ax
+
+	mov ax, 0x9000 - 0x600
+	mov es, ax
+	pop ax
 	
 	mov byte [isOdd], 0                     ;计算出表项的整体字节数，并判断奇偶
 	mov bx, 3				
@@ -88,33 +124,37 @@ FirstRootDirSector      equ     19
 RootDirSectors          equ     14
 RootDirNameLen          equ     11
 DirCountPerSector       equ     16              ;一个扇区 512/32 = 16个目录项
-FixedFirstDataSector    equ     30
+FixedFirstDataSector    equ     31
+
+Msg_LOADING:			db		"Loading"
 
 findSector:	            dw      0
 loopNameLen:            dw      RootDirNameLen                      ;文件名长度为11
 loopSector:             db      RootDirSectors
+fileSizeLimit:			dd		0
 
-ERNO_SUCCESS:           db       0
-ERNO_NOFILE:            db      -1
-ERNO_ERRORFILE:         db      -2
+ERNO_SUCCESS:           db       0x00
+ERNO_FAILED:            db      -1
 ;======================================================
 ;函数：读取文件的data 到 es:bx 地址
 ;参数：es:bx	-> 文件数据读取到的地址  
 ;参数：si 		-> 存储文件名字符串首地址 < 8 + 3 = 11><bit>
+;参数: eax		-> 文件最大大小
 ;返回值：ax   成功保存0  失败保存-1
 ;======================================================
 ReadFileData:
 	mov word [findSector], FirstRootDirSector
+	mov [fileSizeLimit], eax
 SECTOR_LOOP:                                    ;第一阶段   -->   在根目录区寻找文件
 	cmp byte [loopSector], 0                    ;循环 RootDirSectors  14 次数。结束了，需要将它恢复为16
-	jz FILENAME_NOT_FOUND
+	jz LOAD_FILED
 	dec byte [loopSector]
 
 	mov ax, word [findSector]
-	mov cl, 1
+	mov cl, 1					;0x7d18
 	call ReadSector                             ;读到  es:bx 处
 
-	mov di, bx                                  ;di 指到扇区起始，即扇区第一个目录项的名字段
+	mov di, bx              ;0x7d1d                    ;di 指到扇区起始，即扇区第一个目录项的名字段
 
     push si                                     ;保存这个si 首地址
     push di                                     ;保存这个目录项的地址
@@ -158,46 +198,61 @@ NEXT_SECTOR_LOOP:
     pop si
 	jmp SECTOR_LOOP
 
-FILENAME_NOT_FOUND:
-    mov al, ERNO_NOFILE                         ;保存错误码
-	ret
-
 FILENAME_FOUND:                                 ;第二阶段   -->     导入文件data
 	
 	pop di                                      ;1-取出目录项地址，拿到首簇号 地址为 0x7cbe断点
     pop si
 
+	push di
 	add di, 0x1a			                    ;是首簇号 = 目录项地址 + 0x1a
 	mov cx, 0
 	mov cx, [es:di]	                            ;获取到了首簇号里的内容 <即下一个簇号>
+	pop di
 	push cx
+
+	add di, 0x1c								;得到文件大小
+	mov eax, 0
+	mov eax, [es:di]
+	cmp eax, [fileSizeLimit]
+	ja  LOAD_FILED
 
 	mov ax, FixedFirstDataSector	            ;Fixed过后的数据区首扇区
 	add ax, cx                                  ;得到数据扇区号存放在ax
 
 LOADING_FILE:
-    call PrintDot                               ;每一次读入扇区，打一个点 '.'
-	mov cl, 1
+	mov cl, 1				;0x7d68
 	call ReadSector                             ;读ax存放的扇区
 
-	pop ax		                                
+	pop ax		            ;0x7d6d                   
 	call GetFatByAx			                    ;取出下一个簇号	，如果大于0xff8则读完了
 
-	cmp ax, 0xff8
+	cmp ax, 0xff8			;0x7d71
 	jae	LOAD_COMPLETED		;above-> 大于
 
     cmp ax, 0xff7
-    je  FILE_ERROR
+    je  LOAD_FILED
 
 	push ax				                        ;还有扇区未读，保存簇号
 	mov cx, FixedFirstDataSector
 	add ax, cx
 
 	add bx, [BPB_BytsPerSec]                    ;自动增加 一个扇区的内存地址
+	jc FILE_ABOVE_64K
+	jmp NEXT_LOADING
+
+FILE_ABOVE_64K:
+	push ax
+	mov ax, es
+	add ax, 0x1000								;64K
+	mov es, ax
+	pop ax
+
+NEXT_LOADING:
 	jmp LOADING_FILE
 
-FILE_ERROR:
-    mov al, ERNO_ERRORFILE                         ;保存错误码
+
+LOAD_FILED:
+	mov al, ERNO_FAILED
 	ret
 
 LOAD_COMPLETED:
