@@ -21,8 +21,8 @@ LOADERFILE := ./boot/bootloader.asm
 
 # 头文件目录
 INCLUDE_DIR = \
-			  -I./include/asm	\
-			  -I./include/fat12
+			  -I./include/asm/	\
+			  -I./include/fat12/
 
 BIN_FILES := loader_bin kernel_bin
 IMAGE_FILES := mount_image
