@@ -19,10 +19,25 @@ IMAGE_FILE	:= $(IMAGE_OUT)/moos.img
 BOOTFILE = ./boot/boot.asm
 LOADERFILE := ./boot/bootloader.asm
 
-# 头文件目录
-INCLUDE_DIR = \
-			  -I./include/asm/	\
-			  -I./include/fat12/
+# BOOT头文件目录
+BOOT_INCLUDE_DIR = \
+			  -I./boot/include/asm/	\
+			  -I./boot/include/fat12/
+# KENREL 头文件目录
+KERNEL_INCLUDE_DIR = \
+				-I./include/
+
+# KERNEL C文件
+KERNEL_OBJ_FILES = \
+				$(KERNEL_DIR)/main.o	\
+				$(KERNEL_DIR)/printk/printk.o	\
+				$(KERNEL_DIR)/printk/string.o	\
+				$(KERNEL_DIR)/printk/vsprint.o	\
+				$(KERNEL_DIR)/printk/video-vga.o
+
+# GCC flags
+C_FLAGS := -fno-pic -m32 -fno-stack-protector -fno-builtin
+
 
 BIN_FILES := loader_bin kernel_bin
 IMAGE_FILES := mount_image
@@ -30,7 +45,7 @@ IMAGE_FILES := mount_image
 .PHONY:all
 
 all: $(BIN_FILES) $(IMAGE_FILES)
-	nasm  $(INCLUDE_DIR) $(BOOTFILE) 	-o $(BOOT_BIN)
+	nasm  $(BOOT_INCLUDE_DIR) $(BOOTFILE) 	-o $(BOOT_BIN)
 	dd if=$(BOOT_BIN) of=$(IMAGE_OUT)/moos.img bs=512 count=1 conv=notrunc
 
 
@@ -38,14 +53,17 @@ run:
 	bochs -q
 # loader.bin 文件
 loader_bin:
-	nasm  $(INCLUDE_DIR) $(LOADERFILE)  -o $(LOADER_BIN)
+	nasm  $(BOOT_INCLUDE_DIR) $(LOADERFILE)  -o $(LOADER_BIN)
 
-
-kernel_bin:
+# 	gcc -c $(C_FLAGS) $(KERNEL_INCLUDE_DIR) -o $(OUT_DIR)/main.o $(KERNEL_DIR)/main.c
+kernel_bin: $(KERNEL_OBJ_FILES)
 	nasm -f elf $(KERNEL_DIR)/asm/kernel.asm -o $(OUT_DIR)/kernel.o
 	nasm -f elf $(KERNEL_DIR)/asm/kernel_lib32.asm -o $(OUT_DIR)/kernel_lib32.o
-	gcc -c -m32 -o $(OUT_DIR)/main.o $(KERNEL_DIR)/main.c
-	ld -melf_i386 -Ttext 0x1000 -o $(KERNEL_BIN) $(OUT_DIR)/*.o
+	ld -melf_i386 -Tkernel.ld -s -o $(KERNEL_BIN) $(KERNEL_OBJ_FILES) $(OUT_DIR)/*.o
+
+.c.o:
+	gcc -c $(C_FLAGS) -m32 $(KERNEL_INCLUDE_DIR) -o $@ $^
+
 
 # 挂载 fat12 复制文件
 mount_image:
@@ -68,4 +86,4 @@ umount:
 	sudo umount $(IMAGE_MOUNT_DIR)
 
 clean:
-	rm $(BIN_OUT)/* $(OUT_DIR)/*.o
+	rm $(BIN_OUT)/* $(OUT_DIR)/*.o $(KERNEL_OBJ_FILES)

@@ -3,6 +3,7 @@
 ;---------------------------------------------------------------
 global _start
 
+extern _Low_ScreenClean
 extern moos_main
 ;===============================================================
 ;数据段
@@ -25,7 +26,7 @@ STACK_OF_KERNEL:
 ;===============================================================
 ;代码段
 ;---------------------------------------------------------------
-[section .text]
+[section .text.entry]
 align 32
 [bits 32]
 
@@ -36,7 +37,8 @@ _start:
     mov fs, ax
     mov esp, STACK_OF_KERNEL
 
-    jmp moos_main
+    call _Low_ScreenClean
+    call moos_main
 
     ;will not be exec
     jmp $

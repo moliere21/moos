@@ -39,7 +39,7 @@ START:
 	mov ds, ax
     mov es, ax
 	mov ss, ax
-	mov sp, LOADER_STACK_BASE
+	mov esp, LOADER_STACK_BASE
 
     ; 清屏 打印字符串
     ;call DispClean
@@ -153,7 +153,7 @@ PM_START:
     mov es, ax
     mov fs, ax
     mov ss, ax
-    mov sp, STACK_DOWN + 4096
+    mov esp, STACK_DOWN + 4096 + LOADER_PHY_ADDR
 
     mov ax, Selec_Video32_R0
     mov gs, ax
