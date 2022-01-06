@@ -1,5 +1,7 @@
 #include <printk.h>
 #include <vga.h>
+
+
 /*
  * moos 主函数
  */

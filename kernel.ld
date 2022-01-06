@@ -20,7 +20,7 @@ using internal linker script:
 ENTRY(_start)
 SECTIONS
 {
-  . = 0x1000;
+  . = 0x1500;
   . = ALIGN(32);
   .text           :
   {

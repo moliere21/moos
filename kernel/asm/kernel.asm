@@ -3,7 +3,7 @@
 ;---------------------------------------------------------------
 global _start
 
-extern _Low_ScreenClean
+extern arch_main
 extern moos_main
 ;===============================================================
 ;数据段
@@ -20,8 +20,6 @@ align 32
 [section .bss]
 align 32
 [bits 32]
-KERNEL_STACK:           resb    4*1024                          ;4kb 栈大小
-STACK_OF_KERNEL:   
 
 ;===============================================================
 ;代码段
@@ -31,13 +29,8 @@ align 32
 [bits 32]
 
 _start:
-    mov ax, ds
-    mov es, ax
-    mov ss, ax                                                
-    mov fs, ax
-    mov esp, STACK_OF_KERNEL
+    call arch_main
 
-    call _Low_ScreenClean
     call moos_main
 
     ;will not be exec

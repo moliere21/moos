@@ -11,6 +11,42 @@ global _Low_PrintStr
 global _Low_PrintChar
 global _Low_IntToStr
 global _Low_ScreenClean
+global _Low_MemCopy
+
+;=================================================
+;函数： 内存复制  MemCopy
+;=================================================
+;=================================================
+;参数:
+;       es:esi      ->      源内存地址
+;       es:edi      ->      目的内存地址
+;       ecx         ->      内存字节数
+;返回值:
+;       eax         ->      复制的内存字节数
+;       int MemCopy(void* dst, void* src, int count)
+;=================================================
+_Low_MemCopy:
+    push edi
+    push esi
+    push ecx
+
+    mov ecx, [esp + 4 * 6]
+    mov esi, [esp + 4 * 5]
+    mov edi, [esp + 4 * 4]
+.COPY_LOOP:
+    cmp ecx, 0
+    je  .COPY_DONE
+    lodsb
+    mov byte [es:edi], al
+    inc edi
+    loop .COPY_LOOP
+
+.COPY_DONE:
+    pop ecx
+    pop esi
+    pop edi
+    ret
+
 ;=================================================
 ;变量 : 保存 存储光标位置 的地址
 ;=================================================

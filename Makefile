@@ -2,6 +2,9 @@
 IMAGE_MOUNT_DIR := ./mnt
 KERNEL_DIR	:= ./kernel
 
+# 架构目录
+ARCH_DIR := ./arch/i386
+
 # out 输出目录
 OUT_DIR := ./out
 BIN_OUT := ./out/bin
@@ -15,27 +18,40 @@ KERNEL_BIN	:= $(BIN_OUT)/kernel.bin
 # 镜像文件
 IMAGE_FILE	:= $(IMAGE_OUT)/moos.img
 
-# 源文件
-BOOTFILE = ./boot/boot.asm
-LOADERFILE := ./boot/bootloader.asm
+# BOOT 源文件
+BOOTFILE = $(ARCH_DIR)/boot/boot.asm
+LOADERFILE := $(ARCH_DIR)/boot/bootloader.asm
+
 
 # BOOT头文件目录
 BOOT_INCLUDE_DIR = \
-			  -I./boot/include/asm/	\
-			  -I./boot/include/fat12/
+			  -I$(ARCH_DIR)/boot/include/asm/	\
+			  -I$(ARCH_DIR)/boot/include/fat12/
+
+
+
+
 # KENREL 头文件目录
 KERNEL_INCLUDE_DIR = \
-				-I./include/
+				-I./include/	\
+				-I./arch/i386/include/
 
-# KERNEL C文件
+# KERNEL 编译文件
 KERNEL_OBJ_FILES = \
 				$(KERNEL_DIR)/main.o	\
 				$(KERNEL_DIR)/printk/printk.o	\
 				$(KERNEL_DIR)/printk/string.o	\
-				$(KERNEL_DIR)/printk/vsprint.o	\
-				$(KERNEL_DIR)/printk/video-vga.o
+				$(KERNEL_DIR)/printk/vsprint.o
 
-# GCC flags
+# 架构 KERNEL 编译文件
+ARCH_OBJ_FILES = \
+				$(ARCH_DIR)/kernel/video-vga.o	\
+				$(ARCH_DIR)/kernel/gdt.o	\
+				$(ARCH_DIR)/kernel/idt.o	\
+				$(ARCH_DIR)/kernel/main.o
+
+
+# 编译 GCC flags
 C_FLAGS := -fno-pic -m32 -fno-stack-protector -fno-builtin
 
 
@@ -49,17 +65,16 @@ all: $(BIN_FILES) $(IMAGE_FILES)
 	dd if=$(BOOT_BIN) of=$(IMAGE_OUT)/moos.img bs=512 count=1 conv=notrunc
 
 
-run:
-	bochs -q
 # loader.bin 文件
 loader_bin:
 	nasm  $(BOOT_INCLUDE_DIR) $(LOADERFILE)  -o $(LOADER_BIN)
 
-# 	gcc -c $(C_FLAGS) $(KERNEL_INCLUDE_DIR) -o $(OUT_DIR)/main.o $(KERNEL_DIR)/main.c
-kernel_bin: $(KERNEL_OBJ_FILES)
-	nasm -f elf $(KERNEL_DIR)/asm/kernel.asm -o $(OUT_DIR)/kernel.o
-	nasm -f elf $(KERNEL_DIR)/asm/kernel_lib32.asm -o $(OUT_DIR)/kernel_lib32.o
-	ld -melf_i386 -Tkernel.ld -s -o $(KERNEL_BIN) $(KERNEL_OBJ_FILES) $(OUT_DIR)/*.o
+# kernel.bin 文件
+kernel_bin: $(KERNEL_OBJ_FILES) $(ARCH_OBJ_FILES)
+	nasm -f elf $(BOOT_INCLUDE_DIR) $(KERNEL_DIR)/asm/kernel.asm -o $(OUT_DIR)/kernel.o
+	nasm -f elf $(BOOT_INCLUDE_DIR) $(KERNEL_DIR)/asm/kernel_lib32.asm -o $(OUT_DIR)/kernel_lib32.o
+	nasm -f elf $(BOOT_INCLUDE_DIR) $(ARCH_DIR)/kernel/i386_lib32.asm -o $(OUT_DIR)/i386_lib32.o
+	ld -melf_i386 -Tkernel.ld -s -o $(KERNEL_BIN) $(ARCH_OBJ_FILES) $(KERNEL_OBJ_FILES) $(OUT_DIR)/*.o
 
 .c.o:
 	gcc -c $(C_FLAGS) -m32 $(KERNEL_INCLUDE_DIR) -o $@ $^
@@ -74,8 +89,9 @@ mount_image:
 	sudo umount ./mnt
 
 
-
-
+# 运行
+run:
+	bochs -q
 
 
 
@@ -86,4 +102,4 @@ umount:
 	sudo umount $(IMAGE_MOUNT_DIR)
 
 clean:
-	rm $(BIN_OUT)/* $(OUT_DIR)/*.o $(KERNEL_OBJ_FILES)
+	rm $(BIN_OUT)/* $(OUT_DIR)/*.o $(KERNEL_OBJ_FILES) $(ARCH_OBJ_FILES)
